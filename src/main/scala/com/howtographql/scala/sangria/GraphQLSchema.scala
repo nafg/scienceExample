@@ -4,17 +4,17 @@ import akka.http.scaladsl.model.DateTime
 import sangria.schema.{ListType, ObjectType}
 import models._
 import sangria.ast.StringValue
-import sangria.execution.deferred.{DeferredResolver, Fetcher, Relation, RelationIds}
+import sangria.execution.deferred.{DeferredResolver, Fetcher, HasId, Relation, RelationIds}
 import sangria.schema._
 import sangria.macros.derive._
 
 object GraphQLSchema {
 
-  implicit val GraphQLDateTime = ScalarType[DateTime](//1
-    "DateTime",//2
+  implicit val GraphQLDateTime = ScalarType[DateTime]( //1
+    "DateTime", //2
     coerceOutput = (dt, _) => dt.toString, //3
     coerceInput = { //4
-      case StringValue(dt, _, _ ) => DateTime.fromIsoDateTimeString(dt).toRight(DateTimeCoerceViolation)
+      case StringValue(dt, _, _) => DateTime.fromIsoDateTimeString(dt).toRight(DateTimeCoerceViolation)
       case _ => Left(DateTimeCoerceViolation)
     },
     coerceUserInput = { //5
@@ -45,9 +45,9 @@ object GraphQLSchema {
     Interfaces(IdentifiableType),
     AddFields(
       Field("links", ListType(LinkType),
-        resolve = c =>  linksFetcher.deferRelSeq(linkByUserRel, c.value.id)),
+        resolve = c => linksFetcher.deferRelSeq(linkByUserRel, c.value.id)),
       Field("votes", ListType(VoteType),
-        resolve = c =>  votesFetcher.deferRelSeq(voteByUserRel, c.value.id))
+        resolve = c => votesFetcher.deferRelSeq(voteByUserRel, c.value.id))
 
     )
   )
@@ -55,8 +55,8 @@ object GraphQLSchema {
   lazy val VoteType: ObjectType[Unit, Vote] = deriveObjectType[Unit, Vote](
     Interfaces(IdentifiableType),
     ExcludeFields("userId", "linkId"),
-    AddFields(Field("user",  UserType, resolve = c => usersFetcher.defer(c.value.userId))),
-    AddFields(Field("link",  LinkType, resolve = c => linksFetcher.defer(c.value.linkId)))
+    AddFields(Field("user", UserType, resolve = c => usersFetcher.defer(c.value.userId))),
+    AddFields(Field("link", LinkType, resolve = c => linksFetcher.defer(c.value.linkId)))
   )
 
   import sangria.marshalling.sprayJson._
@@ -79,6 +79,10 @@ object GraphQLSchema {
     (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getLinks(ids),
     (ctx: MyContext, ids: RelationIds[Link]) => ctx.dao.getLinksByUserIds(ids(linkByUserRel))
   )
+
+  val todayLinksFetcher = Fetcher(
+    (ctx: MyContext, ids: Seq[Int]) => ctx.dao.isFreshPost(ids)
+  )(HasId(_._1))
 
   val usersFetcher = Fetcher(
     (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getUsers(ids)
@@ -153,9 +157,14 @@ object GraphQLSchema {
         UserType,
         arguments = EmailArg :: PasswordArg :: Nil,
         resolve = ctx => UpdateCtx(
-          ctx.ctx.login(ctx.arg(EmailArg), ctx.arg(PasswordArg))){ user =>
+          ctx.ctx.login(ctx.arg(EmailArg), ctx.arg(PasswordArg))) { user =>
           ctx.ctx.copy(currentUser = Some(user))
         }
+      ),
+      Field("todaySPosts",
+        ListType(LinkType),
+        arguments = Ids :: Nil,
+        resolve = c => todayLinksFetcher.deferSeq(c.arg(Ids))
       )
     )
   )

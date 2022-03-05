@@ -13,9 +13,9 @@ object AuthMiddleware extends Middleware[MyContext] with MiddlewareBeforeField[M
   override def afterQuery(queryVal: QueryVal, context: MiddlewareQueryContext[MyContext, _, _]) = ()
 
   override def beforeField(queryVal: QueryVal, mctx: MiddlewareQueryContext[MyContext, _, _], ctx: Context[MyContext, _]) = {
-    val requireAuth = ctx.field.tags contains Authorized
-
-    if(requireAuth) ctx.ctx.ensureAuthenticated()
+//    val requireAuth = ctx.field.tags contains Authorized
+//
+//    if(requireAuth) ctx.ctx.ensureAuthenticated()
 
     continue
   }
