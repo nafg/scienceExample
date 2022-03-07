@@ -4,7 +4,7 @@ version := "1.0"
 
 description := "GraphQL server with akka-http and sangria"
 
-scalaVersion := "2.12.3"
+scalaVersion := "2.12.15"
 
 scalacOptions ++= Seq("-deprecation", "-feature")
 
