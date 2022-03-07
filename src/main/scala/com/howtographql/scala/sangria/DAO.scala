@@ -46,14 +46,14 @@ class DAO(db: Database) {
       Votes.filter { vote =>
         rel.rawIds
           .collect({
-            case (SimpleRelation("byUser"), ids: Seq[Int]) =>
+            case (SimpleRelation("byUser"), ids: Seq[Int] @unchecked) =>
               vote.userId inSet ids
-            case (SimpleRelation("byLink"), ids: Seq[Int]) =>
+            case (SimpleRelation("byLink"), ids: Seq[Int] @unchecked) =>
               vote.linkId inSet ids
           })
           .foldLeft(true: Rep[Boolean])(_ || _)
 
-      } result
+      }.result
     )
 
   def createUser(
@@ -103,6 +103,8 @@ class DAO(db: Database) {
         .headOption
     }
 
+  def writeTodayPosts(param: Any): Future[Unit] = ???
+
   def collectTodayPost(ids: Seq[Int]) = { // TODO add fetcher
     for {
       isFresh <- isFreshPost(ids)
@@ -111,41 +113,45 @@ class DAO(db: Database) {
     } yield true
   }
 
-  def isFreshPost(ids: Seq[Int]): Future[Seq[(Int, Boolean)]] = { // todayLinksFetcher at src/main/scala/com/howtographql/scala/sangria/GraphQLSchema.scala
-    db.run {
-      val now = DateTime.MinValue
-      val startOfTheDay = DateTime(now.year, now.month, now.day)
-      (Links
+  def isFreshPostQuery(
+      ids: Seq[Int]
+  ): Query[(Rep[Int], Rep[Boolean]), (Int, Boolean), Seq] = { // todayLinksFetcher at src/main/scala/com/howtographql/scala/sangria/GraphQLSchema.scala
+    val now = DateTime.MinValue
+    val startOfTheDay = DateTime(now.year, now.month, now.day)
+    (Links
+      .filter(_.postedBy inSet ids)
+      .filter(_.createdAt >= startOfTheDay)
+      .map(l => (l.id, true)) ++
+      Links
         .filter(_.postedBy inSet ids)
-        .filter(_.createdAt >= startOfTheDay)
-        .map(l => (l.id, true)) ++
-        Links
-          .filter(_.postedBy inSet ids)
-          .filter(_.createdAt < startOfTheDay)
-          .map(l => (l.id, false))).result
-    }
+        .filter(_.createdAt < startOfTheDay)
+        .map(l => (l.id, false)))
   }
 
-  def getTodayPosts(isFresh: Seq[(Int, Boolean)]) = {
+  def isFreshPost(ids: Seq[Int]): Future[Seq[(Int, Boolean)]] =
+    db.run(isFreshPostQuery(ids).result)
+
+  def getTodayPosts(isFresh: Seq[(Int, Boolean)]): Future[Seq[(Int, String, String, DateTime, String)]] = {
     val query = isFresh.map { labelId =>
       Links
         .filter(_.id === labelId._1)
         .join(Users)
-        .on(_.postedBy == _.id)
+        .on(_.postedBy === _.id)
         .map(l =>
           (
             l._1.id,
             l._1.url,
-            labelId._2 match {
-              case true  => l._1.description
-              case false => "" // empty description if not fresh, TODO FIX
-            },
+            if (labelId._2)
+              l._1.description
+            else
+              LiteralColumn(""),
             l._1.createdAt,
             l._2.name
           )
         )
+        .result
     }
-    db run query.result // unable to run Seq[Query[Nothing, Nothing, Seq]], TODO FIX
+    db run DBIO.sequence(query).map(_.flatten)
   }
 
 }

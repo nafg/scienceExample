@@ -211,12 +211,12 @@ object GraphQLSchema {
               ctx.ctx.copy(currentUser = Some(user))
           }
       ),
-      Field(
-        "todaySPosts",
-        ListType(LinkType),
-        arguments = Ids :: Nil,
-        resolve = c => todayLinksFetcher.deferSeq(c.arg(Ids))
-      )
+      // Field(
+      //   "todaySPosts",
+      //   ListType(LinkType),
+      //   arguments = Ids :: Nil,
+      //   resolve = c => todayLinksFetcher.deferSeq(c.arg(Ids))
+      // )
     )
   )
 
