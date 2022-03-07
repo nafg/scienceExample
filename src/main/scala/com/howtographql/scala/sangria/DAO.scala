@@ -107,8 +107,7 @@ class DAO(db: Database) {
 
   def collectTodayPost(ids: Seq[Int]) = { // TODO add fetcher
     for {
-      isFresh <- isFreshPost(ids)
-      todayPosts <- getTodayPosts(isFresh)
+      todayPosts <- getTodayPosts(ids)
       _ <- writeTodayPosts(todayPosts) // TODO IMPLEMENT
     } yield true
   }
@@ -131,8 +130,8 @@ class DAO(db: Database) {
   def isFreshPost(ids: Seq[Int]): Future[Seq[(Int, Boolean)]] =
     db.run(isFreshPostQuery(ids).result)
 
-  def getTodayPosts(isFresh: Seq[(Int, Boolean)]): Future[Seq[(Int, String, String, DateTime, String)]] = {
-    val query = isFresh.map { labelId =>
+  def getTodayPosts(ids: Seq[Int]) = {
+    val query = isFreshPostQuery(ids).flatMap { labelId =>
       Links
         .filter(_.id === labelId._1)
         .join(Users)
@@ -141,17 +140,16 @@ class DAO(db: Database) {
           (
             l._1.id,
             l._1.url,
-            if (labelId._2)
-              l._1.description
-            else
-              LiteralColumn(""),
+            Case
+              .If(labelId._2)
+              .Then(l._1.description)
+              .Else(LiteralColumn("")),
             l._1.createdAt,
             l._2.name
           )
         )
-        .result
     }
-    db run DBIO.sequence(query).map(_.flatten)
+    db run query.result
   }
 
 }
